@@ -796,7 +796,7 @@ void RunDailySignals()
 
       if(crossUp && inActive && !hasPos)
          HandleBuySignal(s, fh);
-      else if(crossDown && hasPos)
+      else if(crossDown && (hasPos || !TradingEnabled()))   // signal-only mode has no positions, still report exits
          HandleSellSignal(s, fh);
      }
 

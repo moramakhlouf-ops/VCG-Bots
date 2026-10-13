@@ -325,9 +325,12 @@ void ExecuteBuy(const string s)
 
 void ExecuteClose(const string s)
   {
-   if(!PositionSelect(s))
+   ulong ticket = 0;
+   for(int i = PositionsTotal() - 1; i >= 0 && ticket == 0; i--)
+      if(PositionGetSymbol(i) == s && (int)PositionGetInteger(POSITION_MAGIC) == EA_MAGIC)
+         ticket = (ulong)PositionGetInteger(POSITION_TICKET);
+   if(ticket == 0 || !PositionSelectByTicket(ticket))
       return;
-   ulong  ticket = (ulong)PositionGetInteger(POSITION_TICKET);
    double volume = PositionGetDouble(POSITION_VOLUME);
    long   type   = PositionGetInteger(POSITION_TYPE);
    if(SendDeal(s, (type == POSITION_TYPE_BUY) ? ORDER_TYPE_SELL : ORDER_TYPE_BUY, volume, ticket))
