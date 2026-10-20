@@ -21,13 +21,7 @@
 //| M1 trading is very sensitive to spread/commission: backtest with   |
 //| "Every tick based on real ticks" and forward-test on demo first.   |
 //| No strategy guarantees profit.                                     |
-//|                                                                    |
-//| RESEARCH (VCG XAUUSD M1, Jan 2025 -> Oct 2026, spread included):   |
-//|  ~480 M1 setups tested (pullback, breakout, RSI, Bollinger fade).  |
-//|  None kept an edge out-of-sample. These defaults are the least-    |
-//|  bad: profit factor ~0.99 (2025) / ~1.01 (2026) = roughly break-   |
-//|  even before commission. Tighter stops (e.g. 1.5/2.5 ATR) lost     |
-//|  ~40% in a Jul-Oct 2026 real-tick backtest. Treat as experimental. |
+//| Treat as experimental.                                             |
 //+------------------------------------------------------------------+
 #property copyright "Built for MoraMakhlouf"
 #property version   "1.00"
