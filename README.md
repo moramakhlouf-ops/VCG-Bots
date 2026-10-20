@@ -1,87 +1,75 @@
-# VCG Mid-Cap Relative-Strength EA
+# VCG Bots
 
-An MQL5 Expert Advisor adapting the methodology from `SP400-MidCapStrategy-Report-USEK (1).pdf`
-(stock/S&P 500 ratio → EMA(20)/EMA(50) crossover on a monthly Top-N relative-strength universe),
-scoped automatically to whatever share CFDs **your own VCG Markets MT5 account** actually exposes.
+MQL5 Expert Advisors (EAs) for MetaTrader 5 on VCG Markets. Every bot is a single standalone
+`.mq5` file with no `#include`s: copy it into `MQL5/Experts/`, compile it in MetaEditor, and
+attach it to a chart.
 
-**v1.01: standalone build.** No `#include`s at all — order placement uses raw
-`OrderSend()`/`MqlTradeRequest` instead of the `Trade.mqh` library, and the strategy logic now
-runs from both `OnTick()` and `OnTimer()` (so it behaves correctly in the Strategy Tester and on
-a live/idle chart alike), guarded so it still only does work once per new daily bar / new month.
+## Repository layout
 
-## What it does
+| Folder | What's inside |
+|---|---|
+| `Tested and Worked - High Frequency/` | Bots that trade many times per day (every 2 seconds / every minute). Compiled and run on the VCG MT5 terminal. |
+| `Tested - Lower Frequency - Needs Adjustments/` | Daily, H1 and M5 bots. Tested, but they trade less often and still need tuning. |
 
-1. On startup, scans every symbol your account can see and keeps the ones whose symbol
-   path/description contains `InpGroupSubstring` (default `"Share"`) — or, if you fill in
-   `InpManualSymbolList`, uses that fixed list instead. This is what scopes the bot to
-   "stocks available at VCG Markets" without hardcoding a ticker list that could go stale.
-2. Once a month, ranks that universe by 126-trading-day change in `Close(stock) / Close(benchmark)`
-   and keeps the top `InpTopN` as the active universe (report used top-60 of 345; VCG's Shares
-   list is far smaller, so the default is `InpTopN = 20` — tune this once you see your real
-   universe size in the log).
-3. Every day, computes EMA(20)/EMA(50) on the ratio series for the active universe (plus any
-   symbol you're currently holding, so exits still fire if a name rotates out of the Top-N):
-   - EMA(20) crosses **above** EMA(50) → BUY signal
-   - EMA(20) crosses **below** EMA(50) → EXIT signal
-4. Every signal is printed to the Experts log, optionally pushed to your phone
-   (`InpSendPushAlerts`), and appended to a CSV (`InpSignalLogFile`, in `MQL5\Files`).
+## High-frequency bots
 
-## Signal-only by default — read this before changing anything
+| Bot | Symbol | How often | Logic |
+|---|---|---|---|
+| `VCG_Timer_Orders_EA` | Chart symbol (or `InpSymbol`) | One order every 2 s (`InpIntervalSec`) | Opens a market order on a fixed timer. Direction: alternate, buy only, sell only, random, or follow the last price move. Fixed lots, SL/TP in points, closes each position after 30 s. Execution/volume tool, not a profit strategy: it pays the spread on every order. |
+| `VCG_Gold_M1_Momentum_EA` | XAUUSD | Checks every 1 min, up to 20 trades/day | M15 EMA(50) trend + M1 EMA(20) pullback bounce + RSI(14). ATR stop/target 3:6, 4-hour time stop, 0.5% risk per trade. Experimental. |
 
-`InpLiveTrading = false` by default. In that mode the EA **never calls `OrderSend`/`CTrade`** —
-it only logs and alerts, so you can review signals and place trades yourself in MT5.
+## Lower-frequency bots
 
-If you set `InpLiveTrading = true`, the EA will size positions with an equal-weight formula
-(`equity × InpRiskEquityPct% / InpMaxPositions`) and send real market orders via `CTrade` —
-**on whatever account the EA is attached to.** I'm not able to run or test that mode for you;
-if you enable it, do it on a demo account first, understand the code, and accept the risk
-yourself. I won't place trades and didn't wire this to auto-enable.
+| Bot | Symbol(s) | Timeframe | Logic |
+|---|---|---|---|
+| `VCG_Gold_EA` | XAUUSD | H1 | EMA(200) trend + EMA(20/50) alignment, ADX filter, RSI pullback entry, ATR stop/target and trail. Long + short. |
+| `VCG_Gold_Scalper_EA` | XAUUSD | M5 | EMA(50) trend + fast RSI(5) pullback, ATR stop/target, breakeven, time stop. Long + short. |
+| `VCG_Gold_Trend_EA` | XAUUSD | D1 | Holds gold while EMA(50) > EMA(100); exits when it falls below. Long only. |
+| `VCG_Index_Pullback_EA` | US500Roll + UT100Roll | D1 | Buys dips: RSI(2) < 15 above the 200-day average; exits when RSI(2) > 80. Long only. |
+| `VCG_Stock_Breakout_EA` | Apple, Microsoft, NVIDIA, Amazon, Alphabet, Tesla, AMD | D1 | Buys a close above the prior 100-day high; exits on a close below the prior 20-day low. Long only, equal weight. |
+| `VCG_Stock_Pullback_EA` | Same stocks | D1 | Buys dips: RSI(2) < 15 above the 200-day average; exits when RSI(2) > 70. Long only, equal weight. |
+| `VCG_Apple_RS_EA` | Apple vs S&P 500 | D1 | Relative-strength ratio (Apple / S&P 500), EMA(20)/EMA(50) crossover. |
+| `VCG_MidCap_RS_EA` | One stock, or every share CFD on the account | D1 | Same relative-strength crossover. Multi-symbol mode ranks shares monthly by 126-day relative strength and trades the top `InpTopN`. |
 
-## Two things the report itself flags that you should know before trusting this
+The stock bots list Meta in their default symbol list, but VCG does not offer Meta, so it is
+skipped with a warning in the Journal. The relative-strength bots implement only the EMA
+crossover from the original S&P 400 mid-cap report, not its machine-learning filter, and that
+report's edge was measured on mid-caps, not the mega-caps VCG offers.
 
-- **The ML filter in the report doesn't actually help.** Its Random Forest layer scored
-  AUC-ROC 0.4768 — *below* the 0.5 "random guess" baseline — and its own table shows
-  ML-confirmed signals won 52.7% of the time vs. 55.8% for the signals it *rejected*. That's
-  the filter removing better trades than it keeps, the opposite of what it's supposed to do,
-  even though the report's prose calls it "genuine predictive value." Because of this, and
-  because a real Random Forest isn't practical to run natively inside MQL5, **this EA
-  implements only the EMA/RS crossover core (the part with the actual backtested edge,
-  Sharpe 0.73), not the ML layer.** If you still want it despite the numbers above, the
-  realistic path is a hybrid: retrain the model in Python on a schedule, export its signal
-  scores to a file, and have the EA read that file — say the word and I'll build that piece.
-- **The backtested edge is specific to S&P 400 *mid-caps*, not large-caps.** The report
-  explicitly chose mid-caps for their "higher return dispersion" (page 3). VCG's Shares list
-  is headlined by mega-caps (Tesla, Apple, Alphabet, Microsoft, Amazon in the popular list) —
-  there's no backtest evidence this edge transfers to that universe. Treat this as an
-  unvalidated hypothesis on VCG's instrument list until you've run it through MT5's
-  Strategy Tester on your actual symbols and a multi-year history.
+## Safety: when bots place real orders
 
-## Setup
+| Bot | Strategy Tester | Demo account | Real account |
+|---|---|---|---|
+| Timer Orders, Gold M1 Momentum, Gold Scalper | Trades | Trades | Signal only unless `InpLiveTrading = true` |
+| All other bots | Trades | Signal only unless `InpLiveTrading = true` | Signal only unless `InpLiveTrading = true` |
 
-1. Open **MetaEditor** from your MT5 terminal → File → New → Expert Advisor → paste this file's
-   content into `VCG_MidCap_RS_EA.mq5` (or copy the file directly into
-   `MQL5/Experts/`) → Compile. I can't compile/run MT5 here myself — if you hit compiler
-   errors, paste them back to me and I'll fix the code.
-2. In Market Watch, find VCG's S&P 500 index CFD (commonly `US500`, `SPX500`, or `USA500`) and
-   set `InpBenchmarkSymbol` to the exact name.
-3. Attach the EA to any chart (the symbol/timeframe of that chart doesn't matter — the EA scans
-   its own universe). On first run it prints every distinct symbol group path it found in the
-   Experts log — use one of those strings as `InpGroupSubstring` if `"Share"` doesn't match.
-4. Leave `InpLiveTrading = false`, enable AutoTrading, and let it run for at least one full
-   month so you see a real rebalance + signals in the log/CSV before deciding whether to trust it.
-5. Backtest it in Strategy Tester (with real tick data if available) against your actual VCG
-   symbol list to see whether the edge holds before ever setting `InpLiveTrading = true`.
+"Signal only" means the bot logs signals in the Experts tab but sends no orders. Algo Trading
+must be switched on in the MT5 toolbar for any bot to trade.
 
-## Key inputs
+Built-in limits (inputs on each bot): max open positions, max trades per day, daily loss
+limit, max spread, and trading hours on the intraday bots; risk-based lot sizing capped at 90%
+of free margin.
 
-| Input | Default | Meaning |
+## Install
+
+1. Copy the `.mq5` file into your terminal's `MQL5/Experts/` folder
+   (MT5: File -> Open Data Folder).
+2. Open it in MetaEditor and press Compile (F7).
+3. In MT5, drag the EA from the Navigator onto a chart, tick **Allow Algo Trading**, and check
+   the inputs. The chart's symbol only matters for `VCG_Timer_Orders_EA` (when `InpSymbol` is empty)
+   and single-symbol `VCG_MidCap_RS_EA`.
+
+## Test in the Strategy Tester first
+
+| Bot type | Timeframe | Modelling |
 |---|---|---|
-| `InpBenchmarkSymbol` | `US500` | Benchmark for the ratio series |
-| `InpGroupSubstring` | `Share` | Filters Market Watch to build the universe |
-| `InpManualSymbolList` | *(empty)* | Comma-separated override list |
-| `InpTopN` | `20` | Monthly active-universe size |
-| `InpRSLookbackDays` | `126` | RS ranking lookback (report default) |
-| `InpEMAFast` / `InpEMASlow` | `20` / `50` | Crossover periods |
-| `InpLiveTrading` | `false` | Master switch for real order placement |
-| `InpMaxPositions` | `20` | Equal-weight sizing denominator / position cap |
-| `InpRiskEquityPct` | `100.0` | % of equity spread across `InpMaxPositions` slots |
+| Timer Orders, Gold M1 Momentum | M1 or M5 | Every tick based on real ticks |
+| Gold Scalper, Gold EA | M5 / H1 | Every tick based on real ticks |
+| Daily bots | D1 | 1 minute OHLC |
+
+Pick Custom dates, set the deposit, press Start, then read the Backtest and Journal tabs.
+Spread, commission and overnight swap all matter, most of all for the high-frequency bots.
+Forward-test on a demo account before using real money. No strategy guarantees profit.
+
+VCG symbol names: `XAUUSD`, `US500Roll`, `UT100Roll`, `Apple`, `Microsoft`, `NVIDIA`, `Amazon`,
+`Alphabet`, `Tesla`, `AMD`.
